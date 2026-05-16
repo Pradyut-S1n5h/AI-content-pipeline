@@ -1,57 +1,100 @@
-import sys
-
 def generate_script(user_input):
     """Step 1: Convert user idea into a script."""
     print(f"[PROCESS] Analyzing input: '{user_input}'")
-    # This is a placeholder for a real AI call
-    generated_script = f"SCRIPT: A story centered around {user_input}."
+
+    generated_script = f"""
+Scene 1: Introduction of the world based on {user_input}.
+Scene 2: Conflict begins and tension rises.
+Scene 3: Final resolution and conclusion.
+"""
+
     return generated_script
 
+
+# NEW FUNCTION (ADD THIS HERE)
+def split_into_scenes(script):
+    """Step 2: Convert script into structured scene list."""
+    print("[PROCESS] Splitting script into scenes...")
+
+    scenes = []
+
+    lines = script.strip().split("\n")
+
+    for line in lines:
+        line = line.strip()
+        if line:
+            # basic parsing (later replace with LLM)
+            if ":" in line:
+                scene_id, description = line.split(":", 1)
+                scenes.append({
+                    "scene": scene_id.strip(),
+                    "description": description.strip(),
+                    "visual_prompt": f"Visual of: {description.strip()}"
+                })
+
+    return scenes
+
+
 def generate_character_design(script):
-    """Step 2: Extract character details from the script."""
+    """Step 3: Extract character details from the script."""
     print("[PROCESS] Extracting character descriptions...")
-    # This is where an LLM would describe the visuals
-    design_prompt = "DESIGN: A character wearing futuristic gear based on the story."
+
+    design_prompt = "Character in futuristic cyberpunk armor with neon lighting."
+
     return design_prompt
 
-def generate_storyboard(script, design):
-    """Step 3: Combine script and design into a shot list."""
-    print("[PROCESS] Finalizing storyboard layout...")
-    # This would eventually trigger an image generator
-    frames = [
-        "Frame 1: Establishing shot of the setting.",
-        "Frame 2: Character is introduced.",
-        f"Frame 3: Action sequence following the {script}."
-    ]
+
+def generate_storyboard(scenes, design):
+    """Step 4: Combine scenes and design into storyboard."""
+    print("[PROCESS] Building storyboard...")
+
+    frames = []
+
+    for scene in scenes:
+        frames.append(
+            f"{scene['scene']}: {scene['description']} | STYLE: {design}"
+        )
+
     return "\n".join(frames)
 
+
 def run_pipeline():
-    """The main engine that runs the steps in order."""
     print("--- AI Content Pipeline Activated ---")
-    
-    # Get user input
+
     user_prompt = input("Enter your video idea: ")
-    
+
     if not user_prompt:
         print("Error: You didn't enter an idea!")
         return
 
-    # Execute the stages
     script_output = generate_script(user_prompt)
+
+    # NEW STEP INSERTED HERE
+    scenes_output = split_into_scenes(script_output)
+
     design_output = generate_character_design(script_output)
-    storyboard_output = generate_storyboard(script_output, design_output)
-    
-    # Show the results
-    print("\n" + "="*30)
+
+    storyboard_output = generate_storyboard(
+        scenes_output,
+        design_output
+    )
+
+    print("\n" + "=" * 30)
     print("PIPELINE RESULTS:")
-    print(f"1. {script_output}")
-    print(f"2. {design_output}")
-    print(f"3. STORYBOARD:\n{storyboard_output}")
-    print("="*30)
+    print("=" * 30)
+
+    print("\n1. SCRIPT")
+    print(script_output)
+
+    print("\n2. SCENES")
+    for s in scenes_output:
+        print(s)
+
+    print("\n3. STORYBOARD")
+    print(storyboard_output)
+
+    print("=" * 30)
+
 
 if __name__ == "__main__":
-    try:
-        run_pipeline()
-    except KeyboardInterrupt:
-        print("\nPipeline stopped by user.")
-        sys.exit()
+    run_pipeline()
