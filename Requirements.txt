@@ -1,1 +1,3 @@
-huggingface_hub
+huggingface_hub (with your own api key)
+python
+bash
