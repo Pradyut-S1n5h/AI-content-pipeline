@@ -1,0 +1,239 @@
+import json
+import streamlit as st
+from dotenv import load_dotenv
+
+from pipeline import (
+    DEFAULT_MODEL,
+    MissingTokenError,
+    generate_character_design,
+    generate_script,
+    generate_storyboard,
+    split_into_scenes,
+)
+
+load_dotenv()
+
+st.set_page_config(
+    page_title="Scenecraft — AI Storyboard Studio",
+    page_icon="🎬",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+# ---------------------------------------------------------------- styling
+st.markdown(
+    """
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700&family=Inter:wght@400;500&display=swap');
+
+      html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
+      h1, h2, h3, h4 { font-family: 'Sora', sans-serif; letter-spacing: -0.02em; }
+
+      .stApp {
+        background:
+          radial-gradient(900px 500px at 12% -10%, #1e1e5a 0%, transparent 55%),
+          radial-gradient(700px 400px at 95% 0%, #2b1b4d 0%, transparent 50%),
+          #0a0a14;
+        color: #e7e7f0;
+      }
+      section[data-testid="stSidebar"] {
+        background: rgba(16,16,32,.92);
+        border-right: 1px solid rgba(255,255,255,.07);
+      }
+
+      .hero { padding: 2.2rem 0 1.4rem; }
+      .hero h1 {
+        font-size: 3rem; margin: 0; font-weight: 700;
+        background: linear-gradient(100deg,#fff 10%,#a78bfa 55%,#38bdf8 95%);
+        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      }
+      .hero p { color:#9a9ab5; font-size:1.02rem; margin:.5rem 0 0; max-width:44rem; }
+      .pill {
+        display:inline-block; padding:.28rem .7rem; border-radius:999px;
+        background:rgba(167,139,250,.12); border:1px solid rgba(167,139,250,.3);
+        color:#c4b5fd; font-size:.7rem; letter-spacing:.12em; text-transform:uppercase;
+      }
+
+      .card {
+        background: linear-gradient(160deg, rgba(255,255,255,.055), rgba(255,255,255,.02));
+        border: 1px solid rgba(255,255,255,.09);
+        border-radius: 16px; padding: 1.15rem 1.3rem; margin-bottom: .85rem;
+        backdrop-filter: blur(10px);
+        transition: transform .18s ease, border-color .18s ease;
+      }
+      .card:hover { transform: translateY(-2px); border-color: rgba(167,139,250,.45); }
+      .card .num {
+        font-family:'Sora',sans-serif; font-size:.72rem; font-weight:700;
+        letter-spacing:.16em; color:#a78bfa; text-transform:uppercase;
+      }
+      .card .body { margin-top:.45rem; line-height:1.62; color:#dcdcea; }
+      .card .prompt {
+        margin-top:.8rem; padding-top:.7rem; font-size:.8rem; color:#8f8fa8;
+        border-top:1px dashed rgba(255,255,255,.12); font-family:ui-monospace,monospace;
+      }
+
+      .stButton > button {
+        width:100%; border:0; border-radius:12px; padding:.7rem 1rem;
+        font-family:'Sora',sans-serif; font-weight:600; color:#fff;
+        background:linear-gradient(100deg,#6d28d9,#4f46e5 55%,#0ea5e9);
+        box-shadow:0 8px 22px -10px rgba(99,102,241,.9);
+        transition: filter .18s ease, transform .18s ease;
+      }
+      .stButton > button:hover { filter:brightness(1.12); transform:translateY(-1px); }
+
+      .stTextArea textarea, .stTextInput input {
+        background:rgba(255,255,255,.04) !important;
+        border:1px solid rgba(255,255,255,.12) !important;
+        border-radius:12px !important; color:#e7e7f0 !important;
+      }
+      .stTabs [data-baseweb="tab-list"] { gap:.35rem; border-bottom:1px solid rgba(255,255,255,.08); }
+      .stTabs [data-baseweb="tab"] {
+        background:transparent; border-radius:10px 10px 0 0;
+        padding:.55rem 1.05rem; color:#9a9ab5; font-weight:500;
+      }
+      .stTabs [aria-selected="true"] { background:rgba(167,139,250,.13); color:#fff; }
+      footer, #MainMenu { visibility:hidden; }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+# ---------------------------------------------------------------- header
+st.markdown(
+    """
+    <div class="hero">
+      <span class="pill">Scenecraft</span>
+      <h1>Turn one line into a storyboard.</h1>
+      <p>Describe an idea. Get a cinematic script, parsed scenes, and
+         render-ready visual prompts for your AI video pipeline.</p>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+# ---------------------------------------------------------------- sidebar
+with st.sidebar:
+    st.markdown("### ⚙️ Generation settings")
+    num_scenes = st.slider("Scenes", 3, 10, 5)
+    tone = st.selectbox(
+        "Tone",
+        ["Cinematic", "Documentary", "Dreamlike", "Gritty noir", "Whimsical", "Epic"],
+    )
+    with st.expander("Advanced"):
+        model = st.text_input("Model", DEFAULT_MODEL)
+        temperature = st.slider("Creativity", 0.1, 1.5, 0.7, 0.1)
+        max_tokens = st.slider("Max tokens", 300, 2000, 1000, 100)
+    st.divider()
+    st.caption("Set `HF_TOKEN` in your `.env` file to authenticate.")
+
+# ---------------------------------------------------------------- input
+left, right = st.columns([3, 1.15], gap="large")
+
+with left:
+    idea = st.text_area(
+        "Your idea",
+        placeholder="A lighthouse keeper who discovers the sea has stopped moving...",
+        height=118,
+        label_visibility="collapsed",
+    )
+with right:
+    st.write("")
+    go = st.button("✨  Generate storyboard")
+    st.caption("Takes 10–30 seconds.")
+
+if not idea:
+    st.markdown("**Try one of these**")
+    examples = [
+        "A lighthouse keeper and a sea that stopped moving",
+        "The last bookstore on Mars",
+        "A courier delivering a package that hums",
+    ]
+    for col, ex in zip(st.columns(3), examples):
+        if col.button(ex, key=ex):
+            st.session_state["idea_seed"] = ex
+            st.rerun()
+
+idea = idea or st.session_state.pop("idea_seed", "")
+
+# ---------------------------------------------------------------- run
+if go or idea and st.session_state.get("auto_run"):
+    st.session_state["auto_run"] = False
+    if not idea.strip():
+        st.warning("Enter an idea first.")
+    else:
+        try:
+            with st.status("Working…", expanded=True) as status:
+                st.write("Writing the script…")
+                script = generate_script(
+                    idea,
+                    num_scenes=num_scenes,
+                    tone=tone,
+                    model=model,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                )
+                st.write("Parsing scenes…")
+                design = generate_character_design(script)
+                scenes = split_into_scenes(script, style=design)
+                st.write("Assembling storyboard…")
+                storyboard = generate_storyboard(scenes, design)
+                status.update(label="Done", state="complete", expanded=False)
+
+            st.session_state["result"] = {
+                "idea": idea,
+                "script": script,
+                "scenes": [s.to_dict() for s in scenes],
+                "design": design,
+                "storyboard": storyboard,
+            }
+        except MissingTokenError as e:
+            st.error(str(e))
+        except Exception as e:  # noqa: BLE001
+            st.error(f"Generation failed: {e}")
+
+# ---------------------------------------------------------------- output
+result = st.session_state.get("result")
+if result:
+    st.divider()
+    a, b, c = st.columns(3)
+    a.metric("Scenes", len(result["scenes"]))
+    b.metric("Words", len(result["script"].split()))
+    c.metric("Est. runtime", f"{len(result['scenes']) * 8}s")
+
+    tab_board, tab_script, tab_prompts, tab_json = st.tabs(
+        ["🎬 Storyboard", "📄 Script", "🖼 Visual prompts", "⤓ Export"]
+    )
+
+    with tab_board:
+        if not result["scenes"]:
+            st.info("No scenes parsed — check the raw script tab.")
+        for s in result["scenes"]:
+            st.markdown(
+                f"""<div class="card">
+                      <div class="num">{s['scene']}</div>
+                      <div class="body">{s['description']}</div>
+                      <div class="prompt">{s['visual_prompt']}</div>
+                    </div>""",
+                unsafe_allow_html=True,
+            )
+
+    with tab_script:
+        st.markdown(result["script"])
+
+    with tab_prompts:
+        for s in result["scenes"]:
+            st.text_area(s["scene"], s["visual_prompt"], height=90, key=f"p_{s['scene']}")
+
+    with tab_json:
+        st.download_button(
+            "Download JSON",
+            json.dumps(result, indent=2),
+            file_name="storyboard.json",
+            mime="application/json",
+        )
+        st.download_button(
+            "Download storyboard (.txt)",
+            result["storyboard"],
+            file_name="storyboard.txt",
+        )
+        st.json(result)
